@@ -21,4 +21,5 @@ class Calculation(Base):
     b = Column(Float, nullable=False)
     type = Column(String, nullable=False)  # "add", "sub", "mul", "div"
     result = Column(Float, nullable=True)
+    user_id = Column(Integer, nullable=False)
 

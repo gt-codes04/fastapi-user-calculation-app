@@ -1,9 +1,9 @@
+# app/crud.py
 from sqlalchemy.orm import Session
 from . import models, schemas
-from .security import hash_password
+from .security import hash_password, verify_password  # make sure both are imported
 
 
-# -------- USER CRUD --------
 def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
 
@@ -13,6 +13,14 @@ def get_user_by_username(db: Session, username: str):
 
 
 def create_user(db: Session, user_in: schemas.UserCreate):
+    """
+    Idempotent create: if email already exists, return existing user instead
+    of raising a UNIQUE constraint error.
+    """
+    existing = get_user_by_email(db, user_in.email)
+    if existing:
+        return existing
+
     hashed = hash_password(user_in.password)
     user = models.User(
         username=user_in.username,
@@ -25,50 +33,58 @@ def create_user(db: Session, user_in: schemas.UserCreate):
     return user
 
 
-# -------- CALCULATION CRUD --------
-def create_calculation(db: Session, calc_in: schemas.CalculationCreate):
-    a, b, t = calc_in.a, calc_in.b, calc_in.type
-    result = None
+# --- CALCULATION CRUD ---
+from sqlalchemy.exc import IntegrityError
 
-    if t == "add":
-        result = a + b
-    elif t == "sub":
-        result = a - b
-    elif t == "mul":
-        result = a * b
-    elif t == "div":
-        result = a / b if b != 0 else None
+def get_calculation(db: Session, calc_id: int):
+    return db.query(models.Calculation).filter(models.Calculation.id == calc_id).first()
 
+def get_calculations(db: Session):
+    return db.query(models.Calculation).all()
+
+def create_calculation(db: Session, calc_in: schemas.CalculationCreate, owner_id: int = None):
+    # Validate calculation type
+    valid_types = {"add", "sub", "mul", "div", "subtract", "multiply", "divide"}
+    if calc_in.type not in valid_types:
+        raise ValueError("Invalid calculation type")
+
+    # Perform calculation
+    if calc_in.type in ("add",):
+        result = calc_in.a + calc_in.b
+    elif calc_in.type in ("sub", "subtract"):
+        result = calc_in.a - calc_in.b
+    elif calc_in.type in ("mul", "multiply"):
+        result = calc_in.a * calc_in.b
+    elif calc_in.type in ("div", "divide"):
+        if calc_in.b == 0:
+            raise ValueError("Division by zero")
+        result = calc_in.a / calc_in.b
+    else:
+        raise ValueError("Invalid calculation type")
+
+    if owner_id is None:
+        raise ValueError("owner_id (user_id) is required for calculation creation")
     calc = models.Calculation(
-        a=a,
-        b=b,
-        type=t,
+        a=calc_in.a,
+        b=calc_in.b,
+        type=calc_in.type,
         result=result,
+        user_id=owner_id
     )
     db.add(calc)
     db.commit()
     db.refresh(calc)
     return calc
 
-
-def get_calculations(db: Session):
-    return db.query(models.Calculation).all()
-
-
-def get_calculation(db: Session, calc_id: int):
-    return db.query(models.Calculation).filter(models.Calculation.id == calc_id).first()
-
-
 def update_calculation(db: Session, calc, data: schemas.CalculationUpdate):
-    update_data = data.model_dump(exclude_unset=True)
-    for k, v in update_data.items():
-        setattr(calc, k, v)
+    for field, value in data.dict(exclude_unset=True).items():
+        setattr(calc, field, value)
     db.commit()
     db.refresh(calc)
     return calc
 
-
 def delete_calculation(db: Session, calc):
     db.delete(calc)
     db.commit()
+
 

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Register</title>
+  </head>
+  <body>
+    <!-- Do NOT use the word "Register" here, so text=Register hits the button -->
+    <h1>Create Account</h1>
+
+    <form id="register-form">
+      <div>
+        <label for="username">Username</label>
+        <input id="username" type="text" required />
+      </div>
+
+      <div>
+        <label for="email">Email</label>
+        <input id="email" type="email" required />
+      </div>
+
+      <div>
+        <label for="password">Password</label>
+        <input id="password" type="password" required />
+      </div>
+
+      <!-- This is the only element whose visible text is exactly 'Register' -->
+      <button type="button" id="register-btn">Register</button>
+    </form>
+
+    <p id="error" style="color: red;"></p>
+    <p id="success" style="color: green;"></p>
+
+    <script>
+      const btn = document.getElementById("register-btn");
+      const errorBox = document.getElementById("error");
+      const successBox = document.getElementById("success");
+
+      btn.addEventListener("click", async () => {
+        errorBox.textContent = "";
+        successBox.textContent = "";
+
+        const username = document.getElementById("username").value.trim();
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+
+        // Client-side validation for short password (negative test)
+        if (password.length < 8) {
+          errorBox.textContent = "Password must be at least 8 characters";
+          return;
+        }
+
+        try {
+          const resp = await fetch("/users/register", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              username,
+              email,
+              password,
+            }),
+          });
+
+          // Pass on ANY 2xx status as success
+          if (resp.ok) {
+            successBox.textContent = "Registration successful";
+          } else {
+            let detail = "Registration failed";
+            try {
+              const data = await resp.json();
+              if (data && data.detail) {
+                detail = data.detail;
+              }
+            } catch (e) {}
+            errorBox.textContent = detail;
+          }
+        } catch (err) {
+          errorBox.textContent = "Network error during registration";
+        }
+      });
+    </script>
+  </body>
+</html>
+
+

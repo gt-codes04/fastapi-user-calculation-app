@@ -1,3 +1,5 @@
+Updated: Added BREAD functionality screenshots.
+
 FastAPI User & Calculation App
 
 This project implements a FastAPI backend that supports user registration, secure login, and CRUD operations for calculations. It includes automated integration testing and a full CI/CD pipeline using GitHub Actions and Docker Hub.

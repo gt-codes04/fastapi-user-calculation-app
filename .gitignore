@@ -1,0 +1,16 @@
+# Virtualenv
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Pytest cache
+.pytest_cache/
+
+# SQLite dev database
+app.db
+
+# Playwright / test artifacts
+playwright-report/
+test-results/

@@ -26,5 +26,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # ⭐ NEW: install Playwright browsers in CI
+      - name: Install Playwright browsers
+        run: |
+          python -m playwright install --with-deps
+
       - name: Run tests
         run: pytest

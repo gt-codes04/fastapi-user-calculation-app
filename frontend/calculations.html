@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Calculations (BREAD)</title>
+</head>
+<body>
+  <h1>Calculations (BREAD)</h1>
+
+  <!-- Add form -->
+  <form id="add-form">
+    <input type="number" step="any" name="a" placeholder="A" required />
+    <input type="number" step="any" name="b" placeholder="B" required />
+    <select name="operation" required>
+      <option value="add">add</option>
+      <option value="sub">sub</option>
+      <option value="mul">mul</option>
+      <option value="div">div</option>
+    </select>
+    <button type="submit">Add</button>
+  </form>
+
+  <p id="error" style="color: red;"></p>
+
+  <!-- Browse / Edit / Delete table -->
+  <table id="calc-table" border="1" cellpadding="4">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>A</th>
+        <th>B</th>
+        <th>Operation</th>
+        <th>Result</th>
+        <th>Edit</th>
+        <th>Delete</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    // Correct base path for your router
+    const API_BASE = "/calculations";
+
+    // For now we hard-code owner_id = 1.
+    // If your user in the DB is id=2, change this to 2.
+    const DEFAULT_OWNER_ID = 1;
+
+    // Try both keys from login page
+    function getToken() {
+      return localStorage.getItem("token") || localStorage.getItem("access_token");
+    }
+
+    async function apiFetch(url, options = {}) {
+      const token = getToken();
+      const headers = options.headers || {};
+
+      if (token) {
+        headers["Authorization"] = "Bearer " + token;
+      }
+      headers["Content-Type"] = "application/json";
+
+      return fetch(url, { ...options, headers });
+    }
+
+    // ------------ BROWSE (GET /calculations) ------------
+    async function loadCalculations() {
+      const errorEl = document.getElementById("error");
+      errorEl.textContent = "";
+
+      const res = await apiFetch(API_BASE);
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        errorEl.textContent = `Error ${res.status}: ${text || "Failed to load calculations."}`;
+        return;
+      }
+
+      const data = await res.json();
+      const tbody = document.querySelector("#calc-table tbody");
+      tbody.innerHTML = "";
+
+      data.forEach((c) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${c.id}</td>
+          <td><input type="number" step="any" value="${c.a}" data-id="${c.id}" data-field="a" /></td>
+          <td><input type="number" step="any" value="${c.b}" data-id="${c.id}" data-field="b" /></td>
+          <td>
+            <select data-id="${c.id}" data-field="operation">
+              <option value="add" ${c.type === "add" ? "selected" : ""}>add</option>
+              <option value="sub" ${c.type === "sub" ? "selected" : ""}>sub</option>
+              <option value="mul" ${c.type === "mul" ? "selected" : ""}>mul</option>
+              <option value="div" ${c.type === "div" ? "selected" : ""}>div</option>
+            </select>
+          </td>
+          <td class="result-cell">${c.result}</td>
+          <td><button class="save-btn" data-id="${c.id}">Save</button></td>
+          <td><button class="delete-btn" data-id="${c.id}">Delete</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ------------ ADD (POST /calculations?owner_id=1) ------------
+    document.getElementById("add-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("error");
+      errorEl.textContent = "";
+
+      const form = e.target;
+      const a = parseFloat(form.a.value);
+      const b = parseFloat(form.b.value);
+      const operation = form.operation.value; // UI name
+
+      if (Number.isNaN(a) || Number.isNaN(b)) {
+        errorEl.textContent = "A and B must be numbers.";
+        return;
+      }
+
+      // IMPORTANT: backend expects "type" and also owner_id query param
+      const url = `${API_BASE}?owner_id=${DEFAULT_OWNER_ID}`;
+
+      const res = await apiFetch(url, {
+        method: "POST",
+        body: JSON.stringify({ a, b, type: operation }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        errorEl.textContent = `Error ${res.status}: ${text || "Error adding calculation."}`;
+        return;
+      }
+
+      form.reset();
+      await loadCalculations();
+    });
+
+    // ------------ EDIT & DELETE ------------
+    document.getElementById("calc-table").addEventListener("click", async (e) => {
+      const id = e.target.dataset.id;
+      if (!id) return;
+
+      const errorEl = document.getElementById("error");
+      errorEl.textContent = "";
+
+      // EDIT (PUT /calculations/{id})
+      if (e.target.classList.contains("save-btn")) {
+        const row = e.target.closest("tr");
+        const a = parseFloat(row.querySelector('input[data-field="a"]').value);
+        const b = parseFloat(row.querySelector('input[data-field="b"]').value);
+        const operation = row.querySelector('select[data-field="operation"]').value;
+
+        const res = await apiFetch(`${API_BASE}/${id}`, {
+          method: "PUT",
+          body: JSON.stringify({ a, b, type: operation }),
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          alert(`Error ${res.status}: ${text || "Error updating calculation."}`);
+          return;
+        }
+
+        const updated = await res.json();
+        row.querySelector(".result-cell").textContent = updated.result;
+      }
+
+      // DELETE (DELETE /calculations/{id})
+      if (e.target.classList.contains("delete-btn")) {
+        const res = await apiFetch(`${API_BASE}/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          alert(`Error ${res.status}: ${text || "Error deleting calculation."}`);
+          return;
+        }
+
+        e.target.closest("tr").remove();
+      }
+    });
+
+    // Initial load
+    loadCalculations();
+  </script>
+</body>
+</html>
+

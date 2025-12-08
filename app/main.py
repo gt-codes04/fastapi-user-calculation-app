@@ -1,66 +1,67 @@
 # app/main.py
 from pathlib import Path
-from fastapi import FastAPI
+
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
 from app.db import Base, engine
-from app.routers import users, calculations
+from app import models
+from app.routers import users, calculations, reports
 
-# -----------------------
-# Database setup
-# -----------------------
-Base.metadata.create_all(bind=engine)
+# ----------------- DB SETUP -----------------
+# Make sure tables are created
+models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="FastAPI User & Calculation App")
+app = FastAPI()
 
-# -----------------------
-# Routers
-# -----------------------
-app.include_router(users.router)
-app.include_router(calculations.router)
-
-# -----------------------
-# Frontend file loader
-# -----------------------
+# ----------------- FRONTEND PATHS -----------------
+# main.py is in app/, so parent is the project root
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 
-def _read_frontend_file(filename: str) -> str:
-    """Return HTML content or a 'not found' message."""
+def load_html(filename: str) -> str:
+    """Load an HTML file from the root-level frontend/ folder."""
     file_path = FRONTEND_DIR / filename
     if not file_path.exists():
-        return f"<h1>File not found: {file_path}</h1>"
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
     return file_path.read_text(encoding="utf-8")
+# --------------------------------------------------
 
 
-# -----------------------
-# Routes for UI pages
-# -----------------------
-
-@app.get("/", response_class=HTMLResponse)
-def index():
-    return """
-    <h1>FastAPI User & Calculation App</h1>
-    <ul>
-      <li><a href="/register-page">Register Page</a></li>
-      <li><a href="/login-page">Login Page</a></li>
-      <li><a href="/calculations-page">Calculations (BREAD)</a></li>
-      <li><a href="/docs">OpenAPI Docs</a></li>
-    </ul>
-    """
-
-
+# ----------------- PAGE ROUTES -----------------
 @app.get("/register-page", response_class=HTMLResponse)
 def register_page():
-    return _read_frontend_file("register.html")
+    return load_html("register.html")
 
 
 @app.get("/login-page", response_class=HTMLResponse)
 def login_page():
-    return _read_frontend_file("login.html")
+    return load_html("login.html")
 
 
 @app.get("/calculations-page", response_class=HTMLResponse)
 def calculations_page():
-    return _read_frontend_file("calculations.html")
+    return load_html("calculations.html")
+
+
+@app.get("/report-page", response_class=HTMLResponse)
+def report_page():
+    return load_html("reports.html")
+
+
+@app.get("/profile-page", response_class=HTMLResponse)
+def profile_page():
+    # NEW final-project feature page
+    return load_html("profile.html")
+# --------------------------------------------------
+
+
+# ----------------- API ROUTERS -----------------
+# /users/register, /users/login, etc.
+app.include_router(users.router)
+# /calculations/...
+app.include_router(calculations.router)
+# /reports/stats, etc.
+app.include_router(reports.router)
+# --------------------------------------------------

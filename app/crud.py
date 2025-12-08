@@ -1,137 +1,118 @@
 # app/crud.py
-from typing import Optional
-
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-
-from . import models, schemas
-from .security import hash_password
-
-# ---------------- USER HELPERS ---------------- #
+from sqlalchemy import func
+from app import models, schemas
 
 
-def get_user_by_email(db: Session, email: str) -> Optional[models.User]:
+# =======================
+# USER CRUD
+# =======================
+
+def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
 
-
-def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
-    return db.query(models.User).filter(models.User.username == username).first()
-
-
-def create_user(db: Session, user_in: schemas.UserCreate) -> models.User:
-    """
-    Idempotent create: if email already exists, return existing user instead
-    of raising a UNIQUE constraint error.
-    """
-    existing = get_user_by_email(db, user_in.email)
-    if existing:
-        return existing
-
-    hashed = hash_password(user_in.password)
-    user = models.User(
+def create_user(db: Session, user_in: schemas.UserCreate, hashed_password: str):
+    db_user = models.User(
         username=user_in.username,
         email=user_in.email,
-        password_hash=hashed,
+        hashed_password=hashed_password,
     )
-    db.add(user)
+    db.add(db_user)
     db.commit()
-    db.refresh(user)
-    return user
+    db.refresh(db_user)
+    return db_user
 
 
-# ---------------- CALCULATION HELPERS ---------------- #
+# =======================
+# CALCULATIONS CRUD
+# =======================
 
-VALID_TYPES = {"add", "sub", "subtract", "mul", "multiply", "div", "divide"}
-
-
-def _compute_result(a: float, b: float, type_: str) -> float:
-    if type_ in ("add",):
+def _compute(a: float, b: float, type: str) -> float:
+    if type == "add":
         return a + b
-    elif type_ in ("sub", "subtract"):
+    if type == "sub":
         return a - b
-    elif type_ in ("mul", "multiply"):
+    if type == "mul":
         return a * b
-    elif type_ in ("div", "divide"):
+    if type == "div":
         if b == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Division by zero",
-            )
+            raise ValueError("Division by zero")
         return a / b
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid calculation type",
-        )
+    if type == "pow":
+        return a ** b
+    raise ValueError("Invalid operation type")
 
-
-def get_calculation(db: Session, calc_id: int) -> Optional[models.Calculation]:
-    return db.query(models.Calculation).filter(models.Calculation.id == calc_id).first()
-
-
-def get_calculations(db: Session):
-    return db.query(models.Calculation).all()
-
-
-def create_calculation(
-    db: Session,
-    calc_in: schemas.CalculationCreate,
-    owner_id: Optional[int] = None,
-) -> models.Calculation:
-    if owner_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="owner_id is required for calculation creation",
-        )
-
-    if calc_in.type not in VALID_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid calculation type",
-        )
-
-    result = _compute_result(calc_in.a, calc_in.b, calc_in.type)
-
+def create_calculation(db: Session, calc_in: schemas.CalculationCreate, user_id: int):
+    result = _compute(calc_in.a, calc_in.b, calc_in.type)
     calc = models.Calculation(
         a=calc_in.a,
         b=calc_in.b,
         type=calc_in.type,
         result=result,
-        user_id=owner_id,
+        user_id=user_id
     )
     db.add(calc)
     db.commit()
     db.refresh(calc)
     return calc
 
+def get_calculations(db: Session, user_id: int):
+    return db.query(models.Calculation).filter(models.Calculation.user_id == user_id).all()
 
-def update_calculation(
-    db: Session,
-    calc: models.Calculation,
-    data: schemas.CalculationUpdate,
-) -> models.Calculation:
-    update_data = data.dict(exclude_unset=True)
+def get_calculation(db: Session, calc_id: int, user_id: int):
+    return (
+        db.query(models.Calculation)
+        .filter(models.Calculation.id == calc_id,
+                models.Calculation.user_id == user_id)
+        .first()
+    )
 
-    for field, value in update_data.items():
-        setattr(calc, field, value)
+def update_calculation(db: Session, calc: models.Calculation, data: schemas.CalculationUpdate):
+    if data.a is not None:
+        calc.a = data.a
+    if data.b is not None:
+        calc.b = data.b
+    if data.type is not None:
+        calc.type = data.type
 
-    # If a, b or type changed, recompute result
-    if any(k in update_data for k in ("a", "b", "type")):
-        if calc.type not in VALID_TYPES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid calculation type",
-            )
-        calc.result = _compute_result(calc.a, calc.b, calc.type)
+    calc.result = _compute(calc.a, calc.b, calc.type)
 
     db.commit()
     db.refresh(calc)
     return calc
 
-
-def delete_calculation(db: Session, calc: models.Calculation) -> None:
+def delete_calculation(db: Session, calc):
     db.delete(calc)
     db.commit()
+
+
+# =======================
+# REPORTS CRUD
+# =======================
+
+def get_report_summary(db: Session, user_id: int):
+    rows = db.query(models.Calculation).filter(models.Calculation.user_id == user_id)
+
+    total = rows.count()
+    avg_a = rows.with_entities(func.avg(models.Calculation.a)).scalar() or 0
+    avg_b = rows.with_entities(func.avg(models.Calculation.b)).scalar() or 0
+
+    # count by operation type
+    op_counts = (
+        db.query(models.Calculation.type, func.count(models.Calculation.id))
+        .filter(models.Calculation.user_id == user_id)
+        .group_by(models.Calculation.type)
+        .all()
+    )
+
+    operation_dict = {op: count for op, count in op_counts}
+
+    return schemas.ReportSummary(
+        total=total,
+        avg_a=float(avg_a),
+        avg_b=float(avg_b),
+        operations=operation_dict,
+    )
 
 
 

@@ -7,184 +7,218 @@
 <body>
   <h1>Calculations (BREAD)</h1>
 
-  <!-- Add form -->
-  <form id="add-form">
-    <input type="number" step="any" name="a" placeholder="A" required />
-    <input type="number" step="any" name="b" placeholder="B" required />
-    <select name="operation" required>
+  <p>
+    <a href="/login-page">Go to Login</a> |
+    <a href="/report-page">Go to Reports</a> |
+    <a href="/register-page">Go to Register</a> |
+    <a href="/profile-page">Go to Profile</a>
+  </p>
+
+  <!-- Auth status -->
+  <p id="auth-status" style="color: red;"></p>
+
+  <h2>Add New Calculation</h2>
+  <div>
+    A: <input id="a-input" type="number" value="2" />
+    B: <input id="b-input" type="number" value="3" />
+    Operation:
+    <select id="op-select">
       <option value="add">add</option>
       <option value="sub">sub</option>
       <option value="mul">mul</option>
       <option value="div">div</option>
+      <option value="pow">pow</option>
     </select>
-    <button type="submit">Add</button>
-  </form>
+    <button id="create-btn" type="button">Create</button>
+  </div>
 
-  <p id="error" style="color: red;"></p>
+  <p id="create-error" style="color: red;"></p>
 
-  <!-- Browse / Edit / Delete table -->
-  <table id="calc-table" border="1" cellpadding="4">
+  <h2>Your Calculations</h2>
+  <table border="1" cellpadding="4" cellspacing="0">
     <thead>
       <tr>
         <th>ID</th>
         <th>A</th>
         <th>B</th>
-        <th>Operation</th>
+        <th>Type</th>
         <th>Result</th>
         <th>Edit</th>
         <th>Delete</th>
       </tr>
     </thead>
-    <tbody></tbody>
+    <tbody id="calc-body"></tbody>
   </table>
 
   <script>
-    // Correct base path for your router
-    const API_BASE = "/calculations";
+    const BASE_URL = "http://localhost:8000";
 
-    // For now we hard-code owner_id = 1.
-    // If your user in the DB is id=2, change this to 2.
-    const DEFAULT_OWNER_ID = 1;
-
-    // Try both keys from login page
+    // ✅ use the same key "token", with fallback
     function getToken() {
-      return localStorage.getItem("token") || localStorage.getItem("access_token");
+      const t = localStorage.getItem("token") || localStorage.getItem("access_token");
+      console.log("Using token from localStorage:", t);
+      return t;
     }
 
-    async function apiFetch(url, options = {}) {
-      const token = getToken();
-      const headers = options.headers || {};
-
-      if (token) {
-        headers["Authorization"] = "Bearer " + token;
-      }
-      headers["Content-Type"] = "application/json";
-
-      return fetch(url, { ...options, headers });
-    }
-
-    // ------------ BROWSE (GET /calculations) ------------
     async function loadCalculations() {
-      const errorEl = document.getElementById("error");
-      errorEl.textContent = "";
-
-      const res = await apiFetch(API_BASE);
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        errorEl.textContent = `Error ${res.status}: ${text || "Failed to load calculations."}`;
-        return;
-      }
-
-      const data = await res.json();
-      const tbody = document.querySelector("#calc-table tbody");
+      const token = getToken();
+      const statusEl = document.getElementById("auth-status");
+      const tbody = document.getElementById("calc-body");
       tbody.innerHTML = "";
 
-      data.forEach((c) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${c.id}</td>
-          <td><input type="number" step="any" value="${c.a}" data-id="${c.id}" data-field="a" /></td>
-          <td><input type="number" step="any" value="${c.b}" data-id="${c.id}" data-field="b" /></td>
-          <td>
-            <select data-id="${c.id}" data-field="operation">
-              <option value="add" ${c.type === "add" ? "selected" : ""}>add</option>
-              <option value="sub" ${c.type === "sub" ? "selected" : ""}>sub</option>
-              <option value="mul" ${c.type === "mul" ? "selected" : ""}>mul</option>
-              <option value="div" ${c.type === "div" ? "selected" : ""}>div</option>
-            </select>
-          </td>
-          <td class="result-cell">${c.result}</td>
-          <td><button class="save-btn" data-id="${c.id}">Save</button></td>
-          <td><button class="delete-btn" data-id="${c.id}">Delete</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
+      if (!token) {
+        statusEl.style.color = "red";
+        statusEl.textContent = "No token found. Redirecting to login...";
+        // auto-redirect to login
+        setTimeout(() => {
+          window.location.href = "/login-page";
+        }, 1000);
+        return;
+      }
+
+      statusEl.style.color = "green";
+      statusEl.textContent = "Authenticated.";
+
+      try {
+        const resp = await fetch(`${BASE_URL}/calculations/`, {
+          method: "GET",
+          headers: {
+            "Authorization": "Bearer " + token
+          }
+        });
+
+        if (!resp.ok) {
+          statusEl.style.color = "red";
+          statusEl.textContent = "Failed to load calculations (status " + resp.status + ")";
+          console.log("Load calculations response:", resp.status);
+          return;
+        }
+
+        const items = await resp.json();
+        for (const calc of items) {
+          const tr = document.createElement("tr");
+
+          const idTd = document.createElement("td");
+          idTd.textContent = calc.id;
+          tr.appendChild(idTd);
+
+          const aTd = document.createElement("td");
+          aTd.textContent = calc.a;
+          tr.appendChild(aTd);
+
+          const bTd = document.createElement("td");
+          bTd.textContent = calc.b;
+          tr.appendChild(bTd);
+
+          const typeTd = document.createElement("td");
+          typeTd.textContent = calc.type;
+          tr.appendChild(typeTd);
+
+          const resultTd = document.createElement("td");
+          resultTd.textContent = calc.result;
+          tr.appendChild(resultTd);
+
+          // Edit placeholder
+          const editTd = document.createElement("td");
+          const editBtn = document.createElement("button");
+          editBtn.textContent = "Edit";
+          editBtn.onclick = () =>
+            alert("Edit via API /calculations/" + calc.id + " (already tested by integration)");
+          editTd.appendChild(editBtn);
+          tr.appendChild(editTd);
+
+          // Delete
+          const delTd = document.createElement("td");
+          const delBtn = document.createElement("button");
+          delBtn.textContent = "Delete";
+          delBtn.onclick = () => deleteCalculation(calc.id);
+          delTd.appendChild(delBtn);
+          tr.appendChild(delTd);
+
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error("Error loading calculations:", err);
+        statusEl.style.color = "red";
+        statusEl.textContent = "Error loading calculations.";
+      }
     }
 
-    // ------------ ADD (POST /calculations?owner_id=1) ------------
-    document.getElementById("add-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const errorEl = document.getElementById("error");
+    async function createCalculation() {
+      const token = getToken();
+      const errorEl = document.getElementById("create-error");
       errorEl.textContent = "";
 
-      const form = e.target;
-      const a = parseFloat(form.a.value);
-      const b = parseFloat(form.b.value);
-      const operation = form.operation.value; // UI name
-
-      if (Number.isNaN(a) || Number.isNaN(b)) {
-        errorEl.textContent = "A and B must be numbers.";
+      if (!token) {
+        errorEl.textContent = "Not authenticated";
         return;
       }
 
-      // IMPORTANT: backend expects "type" and also owner_id query param
-      const url = `${API_BASE}?owner_id=${DEFAULT_OWNER_ID}`;
+      const aVal = parseFloat(document.getElementById("a-input").value);
+      const bVal = parseFloat(document.getElementById("b-input").value);
+      const opVal = document.getElementById("op-select").value;
 
-      const res = await apiFetch(url, {
-        method: "POST",
-        body: JSON.stringify({ a, b, type: operation }),
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        errorEl.textContent = `Error ${res.status}: ${text || "Error adding calculation."}`;
-        return;
-      }
-
-      form.reset();
-      await loadCalculations();
-    });
-
-    // ------------ EDIT & DELETE ------------
-    document.getElementById("calc-table").addEventListener("click", async (e) => {
-      const id = e.target.dataset.id;
-      if (!id) return;
-
-      const errorEl = document.getElementById("error");
-      errorEl.textContent = "";
-
-      // EDIT (PUT /calculations/{id})
-      if (e.target.classList.contains("save-btn")) {
-        const row = e.target.closest("tr");
-        const a = parseFloat(row.querySelector('input[data-field="a"]').value);
-        const b = parseFloat(row.querySelector('input[data-field="b"]').value);
-        const operation = row.querySelector('select[data-field="operation"]').value;
-
-        const res = await apiFetch(`${API_BASE}/${id}`, {
-          method: "PUT",
-          body: JSON.stringify({ a, b, type: operation }),
+      try {
+        const resp = await fetch(`${BASE_URL}/calculations/?owner_id=0`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
+          body: JSON.stringify({ a: aVal, b: bVal, type: opVal })
         });
 
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          alert(`Error ${res.status}: ${text || "Error updating calculation."}`);
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          console.error("Create error:", resp.status, data);
+          errorEl.textContent = "Create failed (status " + resp.status + ")";
           return;
         }
 
-        const updated = await res.json();
-        row.querySelector(".result-cell").textContent = updated.result;
+        await loadCalculations();
+      } catch (err) {
+        console.error("Create error:", err);
+        errorEl.textContent = "Create failed. See console.";
+      }
+    }
+
+    async function deleteCalculation(id) {
+      const token = getToken();
+      const statusEl = document.getElementById("auth-status");
+
+      if (!token) {
+        statusEl.style.color = "red";
+        statusEl.textContent = "Not authenticated";
+        return;
       }
 
-      // DELETE (DELETE /calculations/{id})
-      if (e.target.classList.contains("delete-btn")) {
-        const res = await apiFetch(`${API_BASE}/${id}`, {
+      try {
+        const resp = await fetch(`${BASE_URL}/calculations/` + id, {
           method: "DELETE",
+          headers: {
+            "Authorization": "Bearer " + token
+          }
         });
 
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          alert(`Error ${res.status}: ${text || "Error deleting calculation."}`);
+        if (!resp.ok) {
+          statusEl.style.color = "red";
+          statusEl.textContent = "Delete failed (status " + resp.status + ")";
+          console.log("Delete resp status:", resp.status);
           return;
         }
 
-        e.target.closest("tr").remove();
+        await loadCalculations();
+      } catch (err) {
+        console.error("Delete error:", err);
+        statusEl.style.color = "red";
+        statusEl.textContent = "Delete failed. See console.";
       }
-    });
+    }
 
-    // Initial load
-    loadCalculations();
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("create-btn").addEventListener("click", createCalculation);
+      loadCalculations();
+    });
   </script>
 </body>
 </html>
-

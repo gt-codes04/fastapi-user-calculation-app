@@ -1,8 +1,7 @@
 # app/schemas.py
-from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
-from pydantic import ConfigDict
+from typing import Optional, Dict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 
 # =======================
@@ -27,14 +26,31 @@ class UserLogin(BaseModel):
 
 class UserRead(UserBase):
     id: int
-
-    # Replaces old orm_mode = True
+    # Pydantic v2-style config for ORM objects
     model_config = ConfigDict(from_attributes=True)
 
 
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class UserProfile(BaseModel):
+    id: int
+    username: str
+    email: EmailStr
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserProfileUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+
+class PasswordChangeRequest(BaseModel):
+    # Use Field for min_length instead of constr() to keep Pylance happy
+    old_password: str = Field(min_length=6)
+    new_password: str = Field(min_length=6)
 
 
 # =======================
@@ -44,7 +60,7 @@ class Token(BaseModel):
 class CalculationBase(BaseModel):
     a: float
     b: float
-    type: str  # "add", "sub", "mul", "div", etc.
+    type: str  # "add", "sub", "mul", "div", "pow", etc.
 
 
 class CalculationCreate(CalculationBase):
@@ -64,6 +80,15 @@ class CalculationRead(CalculationBase):
     id: int
     result: float
     user_id: int
-
     model_config = ConfigDict(from_attributes=True)
 
+
+# =======================
+# Report Schema
+# =======================
+
+class ReportSummary(BaseModel):
+    total: int
+    avg_a: float
+    avg_b: float
+    operations: Dict[str, int]  # or Dict[str, float] if you prefer

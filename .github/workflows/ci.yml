@@ -30,7 +30,9 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # Username is public; hard-code it
+          username: gunateja04
+          # Only the token is secret
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # ---- Build & push image ----
@@ -39,4 +41,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/fastapi-user-calculation-app:latest
+          tags: gunateja04/fastapi-user-calculation-app:latest

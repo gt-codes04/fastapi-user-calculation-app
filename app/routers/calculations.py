@@ -1,54 +1,56 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+# app/routers/calculations.py
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-
+from fastapi import status
 
 from app import schemas, crud
 from app.db import get_db
-from fastapi import Query
+from app.auth import get_current_user
 
-router = APIRouter(prefix="/calculations", tags=["calculations"])
+router = APIRouter(prefix="/calculations", tags=["Calculations"])
 
 
-@router.post("/", response_model=schemas.CalculationRead, status_code=status.HTTP_201_CREATED)
-def create(
+@router.post("/", response_model=schemas.CalculationRead, status_code=201)
+def create_calc(
     calc_in: schemas.CalculationCreate,
     db: Session = Depends(get_db),
-    owner_id: int = Query(None, alias="owner_id")
+    user=Depends(get_current_user),
 ):
-    try:
-        calc = crud.create_calculation(db, calc_in, owner_id=owner_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return calc
+    return crud.create_calculation(db, calc_in, user.id)
 
 
 @router.get("/", response_model=list[schemas.CalculationRead])
-def browse(db: Session = Depends(get_db)):
-    return crud.get_calculations(db)
+def browse(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    return crud.get_calculations(db, user.id)
 
 
 @router.get("/{calc_id}", response_model=schemas.CalculationRead)
-def read(calc_id: int, db: Session = Depends(get_db)):
-    calc = crud.get_calculation(db, calc_id)
+def read(calc_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    calc = crud.get_calculation(db, calc_id, user.id)
     if not calc:
-        raise HTTPException(status_code=404, detail="Calculation not found")
+        raise HTTPException(404, "Calculation not found")
     return calc
 
 
-@router.put("/{calc_id}", response_model=schemas.CalculationRead)
-def update(calc_id: int, data: schemas.CalculationUpdate, db: Session = Depends(get_db)):
-    calc = crud.get_calculation(db, calc_id)
+@router.patch("/{calc_id}", response_model=schemas.CalculationRead)
+def edit(
+    calc_id: int,
+    data: schemas.CalculationUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    calc = crud.get_calculation(db, calc_id, user.id)
     if not calc:
-        raise HTTPException(status_code=404, detail="Calculation not found")
-    updated = crud.update_calculation(db, calc, data)
-    return updated
+        raise HTTPException(404, "Calculation not found")
+
+    return crud.update_calculation(db, calc, data)
 
 
-@router.delete("/{calc_id}", status_code=status.HTTP_200_OK)
-def delete(calc_id: int, db: Session = Depends(get_db)):
-    calc = crud.get_calculation(db, calc_id)
+@router.delete("/{calc_id}", status_code=200)
+def delete(calc_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    calc = crud.get_calculation(db, calc_id, user.id)
     if not calc:
-        raise HTTPException(status_code=404, detail="Calculation not found")
+        raise HTTPException(404, "Calculation not found")
+
     crud.delete_calculation(db, calc)
-    return {"detail": "Calculation deleted"}
-
+    return {"detail": "Deleted"}

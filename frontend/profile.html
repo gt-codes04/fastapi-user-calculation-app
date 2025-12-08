@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Profile</title>
+    <style>
+        body {
+            font-family: Arial;
+            max-width: 500px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f4f4f4;
+        }
+        h2 { color: #333; }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+        }
+        button {
+            background: #007bff; 
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .section {
+            background: white;
+            padding: 16px;
+            margin-top: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
+        .msg { color: green; }
+        .err { color: red; }
+    </style>
+</head>
+<body>
+
+    <h2>User Profile</h2>
+
+    <div id="message"></div>
+
+    <div class="section">
+        <h3>Profile Details</h3>
+        <label>Username</label>
+        <input id="username" type="text">
+
+        <label>Email</label>
+        <input id="email" type="email">
+
+        <button onclick="updateProfile()">Update Profile</button>
+    </div>
+
+    <div class="section">
+        <h3>Change Password</h3>
+        <label>Old Password</label>
+        <input id="old_password" type="password">
+
+        <label>New Password</label>
+        <input id="new_password" type="password">
+
+        <button onclick="changePassword()">Change Password</button>
+    </div>
+
+    <button onclick="logout()" style="background:#dc3545;margin-top:20px;">Logout</button>
+
+<script>
+    const BASE_URL = "http://localhost:8000";
+
+    // Load profile on page load
+    window.onload = () => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+            window.location.href = "/login-page";
+            return;
+        }
+
+        fetch(BASE_URL + "/users/me", {
+            headers: {
+                "Authorization": "Bearer " + token
+            }
+        })
+        .then(res => {
+            if (res.status === 401) {
+                logout();
+            }
+            return res.json();
+        })
+        .then(data => {
+            document.getElementById("username").value = data.username;
+            document.getElementById("email").value = data.email;
+        });
+    };
+
+    // Update username/email
+    function updateProfile() {
+        const token = localStorage.getItem("token");
+
+        const body = {
+            username: document.getElementById("username").value,
+            email: document.getElementById("email").value
+        };
+
+        fetch(BASE_URL + "/users/me", {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify(body)
+        })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById("message").innerHTML =
+                `<p class="msg">Profile updated successfully!</p>`;
+        })
+        .catch(() => {
+            document.getElementById("message").innerHTML =
+                `<p class="err">Error updating profile.</p>`;
+        });
+    }
+
+    // Change password
+    function changePassword() {
+        const token = localStorage.getItem("token");
+
+        const body = {
+            old_password: document.getElementById("old_password").value,
+            new_password: document.getElementById("new_password").value
+        };
+
+        fetch(BASE_URL + "/users/me/change-password", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify(body)
+        })
+        .then(res => {
+            if (res.status === 400) {
+                throw new Error("Old password incorrect");
+            }
+            return res.json();
+        })
+        .then(() => {
+            document.getElementById("message").innerHTML =
+                `<p class="msg">Password changed successfully!</p>`;
+        })
+        .catch(err => {
+            document.getElementById("message").innerHTML =
+                `<p class="err">${err.message}</p>`;
+        });
+    }
+
+    // Logout
+    function logout() {
+        localStorage.removeItem("token");
+        window.location.href = "/login-page";
+    }
+</script>
+
+</body>
+</html>

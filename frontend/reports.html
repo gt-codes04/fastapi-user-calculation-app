@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reports / Summary</title>
+</head>
+<body>
+  <h1>Reports / Summary</h1>
+
+  <p>
+    <a href="/calculations-page">Go to Calculations</a> |
+    <a href="/login-page">Go to Login</a> |
+    <a href="/">Home</a>
+  </p>
+
+  <p id="auth-warning" style="color: red;"></p>
+  <p id="error" style="color: red;"></p>
+
+  <div id="summary" style="margin-top: 20px;">
+    <h2>Overview</h2>
+    <p><strong>Total calculations:</strong> <span id="total">-</span></p>
+    <p><strong>Average A:</strong> <span id="avg-a">-</span></p>
+    <p><strong>Average B:</strong> <span id="avg-b">-</span></p>
+
+    <h3>By Operation Type</h3>
+    <table border="1" cellpadding="4">
+      <thead>
+        <tr>
+          <th>Operation</th>
+          <th>Count</th>
+        </tr>
+      </thead>
+      <tbody id="ops-body">
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const API_URL = "/reports/summary";
+
+    function getToken() {
+      return localStorage.getItem("token");
+    }
+
+    function makeAuthHeaders() {
+      const token = getToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = "Bearer " + token;
+      }
+      return headers;
+    }
+
+    async function loadSummary() {
+      const token = getToken();
+      const authWarning = document.getElementById("auth-warning");
+      const errorEl = document.getElementById("error");
+
+      if (!token) {
+        authWarning.textContent = "No token found. Please log in first.";
+        return;
+      } else {
+        authWarning.textContent = "";
+      }
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "GET",
+          headers: makeAuthHeaders(),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          errorEl.textContent = err.detail || "Failed to load report summary.";
+          return;
+        }
+
+        errorEl.textContent = "";
+        const data = await res.json();
+
+        document.getElementById("total").textContent = data.total;
+        document.getElementById("avg-a").textContent = data.avg_a.toFixed
+          ? data.avg_a.toFixed(2)
+          : data.avg_a;
+        document.getElementById("avg-b").textContent = data.avg_b.toFixed
+          ? data.avg_b.toFixed(2)
+          : data.avg_b;
+
+        const tbody = document.getElementById("ops-body");
+        tbody.innerHTML = "";
+
+        const ops = data.operations || {};
+        const keys = Object.keys(ops);
+
+        if (keys.length === 0) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td colspan="2">No calculations yet.</td>`;
+          tbody.appendChild(tr);
+        } else {
+          keys.forEach((op) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${op}</td>
+              <td>${ops[op]}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        errorEl.textContent = "Network error while loading summary.";
+      }
+    }
+
+    loadSummary();
+  </script>
+</body>
+</html>
